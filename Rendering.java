@@ -79,8 +79,8 @@ public class Rendering extends PApplet {
             color(255,0,0),
             new Point3D(0,0,0));
     drawFaces();
-    // projectPoints();
-    // drawLines(); // For testing purposes only
+    //projectPoints();
+    //drawLines(); // For testing purposes only
   }
 
   // Main draw ends here
@@ -263,7 +263,7 @@ public class Rendering extends PApplet {
     double l1 = area(p1.x,p1.y,p2.x,p2.y,point.x,point.y)/tA;
     double l2 = area(p1.x,p1.y,p3.x,p3.y,point.x,point.y)/tA;
     double l3 = area(p3.x,p3.y,p2.x,p2.y,point.x,point.y)/tA;
-    double interpolatedDepth = 1/(l1/depths[2]+l2/depths[1]+l3/depths[0]);
+    double interpolatedDepth = l1*depths[2]+l2*depths[1]+l3*depths[0];
     return interpolatedDepth;
   }
 
