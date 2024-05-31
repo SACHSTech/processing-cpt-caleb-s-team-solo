@@ -13,11 +13,13 @@ import java.util.List;
  * Author: @duocaleb
 */
 public class Rendering extends PApplet {
-  //initalizing the variables and the arrays
+  // Initalizing the variables
   double dblFocalLength = 500;
   int intScreenSize = 600;
   // 600 instead of 800 because theres 56% less max space to loop through, which means that its far less laggy with only a 200 pixel reduction
   int scDiv2 = intScreenSize/2; // used this so much that i might as well make it a variable
+
+  // Scene stuff
   double cameraX = 0;
   double cameraY = 0;
   double cameraZ = 0;
@@ -25,14 +27,27 @@ public class Rendering extends PApplet {
   double mouseRotationY = 0;
   double mouseCenteredX = 0;
   double mouseCenteredY = 0;
-  // The amount of degrees it turns per half screen of distance the mouse is moved.
   double mouseSensitivity = 180;
-  double playerSpeed = 2;
-  boolean[] isKeyPressed = new boolean[255];
+  double[] zBuffer = new double[intScreenSize*intScreenSize];
   List<Triangle3D> TriangleList3D = new ArrayList<>();
   List<Triangle2D> TriangleList2D = new ArrayList<>();
-  double[] zBuffer = new double[intScreenSize*intScreenSize];
-  Robot mouseMover;
+
+  // Player stuff
+  double playerHeight = 100;
+  double playerXPos = 0;
+  double playerZPos = 0;
+  double playerYPos = 0;
+  double playerXVel = 0;
+  double playerZVel = 0;
+  double playerYVel = 0;
+  double playerSpeed = 2;
+  double jumpHeight = 5;
+
+  // Other stuff
+  double deltaTime = 60/frameRate;
+  boolean[] isKeyPressed = new boolean[256];
+  boolean hasJump = true;
+  Robot mouseStealer9000;
 
   public void settings() {
     size(intScreenSize, intScreenSize);
@@ -41,49 +56,27 @@ public class Rendering extends PApplet {
   public void setup() {
 
     try {
-      mouseMover = new Robot();
+      mouseStealer9000 = new Robot();
     } catch (AWTException e) {
       e.printStackTrace();
     }
     noCursor();
-    mouseMover.mouseMove(displayWidth/2, displayHeight/2);
+    mouseStealer9000.mouseMove(displayWidth/2, displayHeight/2);
   }
 
   // Initialization ends here
 
   public void draw() {
-    TriangleList2D.clear();
-    TriangleList3D.clear();
-    for(int x = 0; x < zBuffer.length; x++){
-      zBuffer[x] =  Float.POSITIVE_INFINITY;
-    }
+    deltaTime = 60/frameRate;
     clear();
     cursorMovement();
     moveChar();
-    addCube(new Point3D(-100, -100, 200), 
-            new Point3D(100, 100, 400), 
-            color(0,0,255),
-            color(255,255,255),
-            color(255,255,0),
-            color(0,128,0),
-            color(255,165,0),
-            color(255,0,0),
-            new Point3D(0,0,0));
-    addCube(new Point3D(-50, -50, 250), 
-            new Point3D(50, 50, 500), 
-            color(0,0,255),
-            color(255,255,255),
-            color(255,255,0),
-            color(0,128,0),
-            color(255,165,0),
-            color(255,0,0),
-            new Point3D(0,0,0));
-    drawFaces();
+    renderInOrder();
     //projectPoints();
     //drawLines(); // For testing purposes only
   }
 
-  // Main draw ends here
+  // 3D framework starts here
 
   public void drawLines(){
     float a = scDiv2;
@@ -193,6 +186,9 @@ public class Rendering extends PApplet {
   }
 
   public void projectPoints() {
+    // So that everything fits into the 2d space
+    frustrumCull();
+
     TriangleList2D.clear();
     for(int a = 0; a < TriangleList3D.size(); a++){
       double[] x = {TriangleList3D.get(a).p1.x, TriangleList3D.get(a).p2.x, TriangleList3D.get(a).p3.x};
@@ -267,15 +263,16 @@ public class Rendering extends PApplet {
     return interpolatedDepth;
   }
 
-  public void drawFaces(){
-    // This took me over a month + reading more than 20 articles on 3d rendering, asking reddit, looking through wikipedia and looking thorugh blogs just to understand how this works and how to implement it.
+  public void frustrumCull(){
     cullTriangles(intScreenSize/(2*dblFocalLength),cameraX,-cameraZ, new int[]{2,0,1},1);
     cullTriangles(-intScreenSize/(2*dblFocalLength),cameraX, -cameraZ, new int[]{2,0,1},-1);
     cullTriangles(intScreenSize/(2*dblFocalLength),cameraY, -cameraZ, new int[]{2,1,0},1);
     cullTriangles(-intScreenSize/(2*dblFocalLength),cameraY, -cameraZ, new int[]{2,1,0},-1);
-    
-    projectPoints();
-    
+  }
+
+  public void drawFaces(){
+    // This took me over a month + reading more than 20 articles on 3d rendering, asking reddit, looking through wikipedia and looking thorugh blogs just to understand how this works and how to implement it.
+
     for(int r = 0; r < TriangleList2D.size(); r++){
       Point2D p1 = TriangleList2D.get(r).p1;
       Point2D p2 = TriangleList2D.get(r).p2;
@@ -302,7 +299,7 @@ public class Rendering extends PApplet {
           double A1 = area (x, y, x2, y2, x3, y3);
           double A2 = area (x1, y1, x, y, x3, y3);
           double A3 = area (x1, y1, x2, y2, x, y);
-          if(A == A1 + A2 + A3){
+          if((int)A == (int)(A1 + A2 + A3)){
             double z = interpolateDepth(new Point2D(x, y,0), pointsList, new int[] {z1,z2,z3});
             if((z-cameraZ) < zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)]){
               zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)] = (z-cameraZ);
@@ -312,10 +309,32 @@ public class Rendering extends PApplet {
         }
       }
     }
+    // border for the screen cause coulors bunch near the edge cause of my subpar edge culling skills
+    for(int x = 0; x < intScreenSize; x++){
+      set(0,x,color(0,0,0));
+      set(x,intScreenSize-1,color(0,0,0));
+      set(intScreenSize-2,x,color(0,0,0));
+    }
   }
 
+  public void renderInOrder(){
+    // Clear all lists and buffers
+    TriangleList2D.clear();
+    TriangleList3D.clear();
+    for(int x = 0; x < zBuffer.length; x++){
+      zBuffer[x] =  Float.POSITIVE_INFINITY;
+    }
+    // Add the scene
+    addScene();
 
-  // 3D Framework ends here!!!!
+    // Project points
+    projectPoints();
+
+    // Draw all faces
+    drawFaces();
+  }
+
+  // Movement / other game elements start here
 
   public void cursorMovement(){
     if(mouseCenteredX == 0 && mouseCenteredY == 0){
@@ -336,44 +355,112 @@ public class Rendering extends PApplet {
     if(mouseRotationY <= -90){
       mouseRotationY = -90;
     }
-    mouseMover.mouseMove(displayWidth/2, displayHeight/2);
+    mouseStealer9000.mouseMove(displayWidth/2, displayHeight/2);
   }
   
   public void keyPressed() {
     if(key != 65535){
-      isKeyPressed[(int)key] = true;
+      isKeyPressed[(int)Character.toLowerCase(key)] = true;
+    }
+    else if(key == CODED && keyCode == SHIFT){
+      isKeyPressed[255] = true;
     }
   }
   
   public void keyReleased() {
     if(key != 65535){
-      isKeyPressed[(int)key] = false;
+      isKeyPressed[(int)Character.toLowerCase(key)] = false;
+    }
+    else if(key == CODED && keyCode == SHIFT){
+      isKeyPressed[255] = false;
     }
   }
 
   public void moveChar() {
+    // If statements. Lots of em.
     double rotA = Math.toRadians(mouseRotationY);
     double rotB = Math.toRadians(mouseRotationX);
     double a = Math.toRadians(90);
+    double zVelStore = 0;
+    double xVelStore = 0;
     if(isKeyPressed[(int)'w']){
-      cameraZ += playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
-      cameraX += playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
-      cameraY += playerSpeed*(60/frameRate)*Math.sin(rotA);
+      zVelStore += playerSpeed*Math.cos(rotB);
+      xVelStore += -playerSpeed*Math.sin(rotB);
+
+      // Commented code for "flight" while testing
+      //cameraZ += playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
+      //cameraX += playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
+      //cameraY += playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'s']){
-      cameraZ -= playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
-      cameraX -= playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
-      cameraY -= playerSpeed*(60/frameRate)*Math.sin(rotA);
+      zVelStore += -playerSpeed*Math.cos(rotB);
+      xVelStore += playerSpeed*Math.sin(rotB);
+      //cameraZ -= playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
+      //cameraX -= playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
+      //cameraY -= playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'a']){
-      cameraZ += playerSpeed*(60/frameRate)*Math.sin(rotB);
-      cameraX += playerSpeed*(60/frameRate)*Math.cos(rotB);
+      zVelStore += playerSpeed*Math.sin(rotB);
+      xVelStore += playerSpeed*Math.cos(rotB);
     }
     if(isKeyPressed[(int)'d']){
-      cameraZ -= playerSpeed*(60/frameRate)*Math.sin(rotB);
-      cameraX -= playerSpeed*(60/frameRate)*Math.cos(rotB);
+      zVelStore += -playerSpeed*Math.sin(rotB);
+      xVelStore += -playerSpeed*Math.cos(rotB);
     }
+    if(zVelStore != 0){
+      playerZVel = zVelStore;
+    }
+    if(xVelStore != 0){
+      playerXVel = xVelStore;
+    }
+    if(isKeyPressed[(int)' '] && hasJump){
+      playerYVel = -jumpHeight;
+      hasJump = false;
+    }
+
+    if(isKeyPressed[255]){
+      playerSpeed = 5;
+    }
+    else{
+      playerSpeed = 2;
+    }
+    // No running off the map :(
+    if(playerXPos > 950){
+      playerXPos = 950;
+    }
+    if(playerXPos < -950){
+      playerXPos = -950;
+    }
+    if(playerZPos > 950){
+      playerZPos = 950;
+    }
+    if(playerZPos < -950){
+      playerZPos = -950;
+    }
+
+    playerYPos += playerYVel*deltaTime;
+    playerXPos += playerXVel*deltaTime;
+    playerZPos += playerZVel*deltaTime;
+    playerXVel *= 0.92*deltaTime;
+    playerZVel *= 0.92*deltaTime;
+    
+
+    if(cameraY < 100 - playerHeight){
+      playerYVel += 0.2*(60/frameRate);
+    }
+    else{
+      playerYVel = 0;
+      hasJump = true;
+    }
+
+    // Camera following
+    cameraX = playerXPos;
+    cameraZ = playerZPos;
+    cameraY = playerYPos;
+
   }
+
+  // Objects are defined here
 
   public void addCube(Point3D minPoint, Point3D maxPoint, int colour1, int colour2, int colour3, int colour4, int colour5, int colour6, Point3D Rotation){
     Point3D[] PointList = new Point3D[8];
@@ -425,5 +512,33 @@ public class Rendering extends PApplet {
       Point3D p3 = PointList[Connections[a][2]];
       TriangleList3D.add(new Triangle3D(p1,p2,p3,colourList[(int)a/2]));
     }
+  }
+
+  public void addTriangle(Point3D p1, Point3D p2, Point3D p3, int colour){  
+    rotatePoint(p1, -mouseRotationX, 0, -mouseRotationY);
+    rotatePoint(p2, -mouseRotationX, 0, -mouseRotationY);
+    rotatePoint(p3, -mouseRotationX, 0, -mouseRotationY);
+    TriangleList3D.add(new Triangle3D(p1,p2,p3,colour));
+}
+
+  // The current scene. Objects added go in here.
+  public void addScene(){
+    addCube(new Point3D(-100, -100, 200), 
+            new Point3D(100, 100, 400), 
+            color(0,0,255),
+            color(255,255,255),
+            color(255,255,0),
+            color(0,128,0),
+            color(255,165,0),
+            color(255,0,0),
+            new Point3D(0,0,0));
+    addTriangle(new Point3D(1000, 100, 1000), 
+            new Point3D(1000, 100, -1000),
+            new Point3D(-1000, 100, 1000), 
+            color(200,200,200));
+    addTriangle(new Point3D(-1000, 100, -1000), 
+            new Point3D(1000, 100, -1000),
+            new Point3D(-1000, 100, 1000), 
+            color(200,200,200));
   }
 }
