@@ -2,7 +2,8 @@ import processing.core.PApplet;
 import java.awt.AWTException;
 import java.awt.Robot;
 import java.util.ArrayList;
-import java.util.List;   
+import java.util.List;
+import java.util.Vector;   
 
 
 /* 
@@ -31,6 +32,10 @@ public class Rendering extends PApplet {
   double[] zBuffer = new double[intScreenSize*intScreenSize];
   List<Triangle3D> TriangleList3D = new ArrayList<>();
   List<Triangle2D> TriangleList2D = new ArrayList<>();
+    // Lighting
+  double ambientLightStrength = 0.1;
+  Point3D lightPosition = new Point3D(0, -300, 0);
+  Point3D lightColour = new Point3D(255,255,255);
 
   // Player stuff
   double playerHeight = 100;
@@ -67,13 +72,17 @@ public class Rendering extends PApplet {
   // Initialization ends here
 
   public void draw() {
+    // Makes sure deltaTime never goes > 1(random accelleration, higher than expected speed, ect)
+    if(frameRate > 60){
+      frameRate = 60;
+    }
     deltaTime = 60/frameRate;
     clear();
     cursorMovement();
     moveChar();
     renderInOrder();
     //projectPoints();
-    //drawLines(); // For testing purposes only
+    drawLines(); // For testing purposes only
   }
 
   // 3D framework starts here
@@ -128,6 +137,7 @@ public class Rendering extends PApplet {
   public void cullTriangles(double m, double b, double a, int[] order, int sign){
     List<Triangle3D> TriangleList3DTemp = new ArrayList<>();
     for (int count = 0; count < TriangleList3D.size(); count++) {
+      Point3D Norm = TriangleList3D.get(count).n;
       double[][] PList = new double[3][3];
       for(int x = 0; x < 3; x++){
         if(order[x] == 0){
@@ -149,7 +159,7 @@ public class Rendering extends PApplet {
       double[] x = {TriangleList3D.get(count).p1.x,TriangleList3D.get(count).p2.x,TriangleList3D.get(count).p3.x};
       double[] y = {TriangleList3D.get(count).p1.y,TriangleList3D.get(count).p2.y,TriangleList3D.get(count).p3.y};
       double[] z = {TriangleList3D.get(count).p1.z,TriangleList3D.get(count).p2.z,TriangleList3D.get(count).p3.z};
-      int c = TriangleList3D.get(count).c;
+      Point3D c = TriangleList3D.get(count).c;
       List<Point3D> whatsOut = new ArrayList<>();
       List<Point3D> whatsIn = new ArrayList<>();
       // CHECK 1
@@ -165,13 +175,13 @@ public class Rendering extends PApplet {
       if(whatsOut.size() == 2){
         Point3D PoI1 = findPoI(whatsOut.get(0), whatsIn.get(0), m,b, a,order);
         Point3D PoI2 = findPoI(whatsOut.get(1), whatsIn.get(0), m,b, a,order);
-        TriangleList3DTemp.add(new Triangle3D(PoI1,PoI2,whatsIn.get(0),c));
+        TriangleList3DTemp.add(new Triangle3D(PoI1,PoI2,whatsIn.get(0), Norm,c));
       }
       else if(whatsOut.size() == 1){
         Point3D PoI1 = findPoI(whatsOut.get(0), whatsIn.get(0), m,b, a,order);
         Point3D PoI2 = findPoI(whatsOut.get(0), whatsIn.get(1), m,b, a,order);
-        TriangleList3DTemp.add(new Triangle3D(PoI1,PoI2,whatsIn.get(0),c));
-        TriangleList3DTemp.add(new Triangle3D(whatsIn.get(0),whatsIn.get(1),PoI2,c));
+        TriangleList3DTemp.add(new Triangle3D(PoI1,PoI2,whatsIn.get(0),Norm,c));
+        TriangleList3DTemp.add(new Triangle3D(whatsIn.get(0),whatsIn.get(1),PoI2,Norm,c));
       }
       else if(whatsOut.size() == 0){
         // Keep the same triangle
@@ -198,7 +208,7 @@ public class Rendering extends PApplet {
         x[count] = -(((x[count]-cameraX) * (dblFocalLength)) / ((z[count]-cameraZ)));
         y[count] = -(((y[count]-cameraY) * (dblFocalLength)) / ((z[count]-cameraZ)));
       }
-      TriangleList2D.add(new Triangle2D(new Point2D(x[0], y[0], TriangleList3D.get(a).p1.z), new Point2D(x[1],y[1],TriangleList3D.get(a).p2.z), new Point2D(x[2],y[2],TriangleList3D.get(a).p3.z), TriangleList3D.get(a).c));
+      TriangleList2D.add(new Triangle2D(new Point2D(x[0], y[0], z[0]), new Point2D(x[1],y[1],z[0]), new Point2D(x[2],y[2],z[0]), TriangleList3D.get(a).n, TriangleList3D.get(a).c));
     }
   }
 
@@ -292,6 +302,7 @@ public class Rendering extends PApplet {
       int yMax = (int)Math.max(Math.max(p1.y, p2.y),p3.y);
       int xMin = (int)Math.min(Math.min(p1.x, p2.x),p3.x);
       int xMax = (int)Math.max(Math.max(p1.x, p2.x),p3.x);
+      int[] depths = {z1,z2,z3};
 
       // proud to say i came up with the bounding box without looking it up(it's pretty much the only concept in this method i didnt look up)
       for(int x = xMin; x < xMax; x++){
@@ -300,29 +311,30 @@ public class Rendering extends PApplet {
           double A2 = area (x1, y1, x, y, x3, y3);
           double A3 = area (x1, y1, x2, y2, x, y);
           if((int)A == (int)(A1 + A2 + A3)){
-            double z = interpolateDepth(new Point2D(x, y,0), pointsList, new int[] {z1,z2,z3});
-            if((z-cameraZ) < zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)]){
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)] = (z-cameraZ);
-              set(scDiv2+x,(scDiv2-y)-1,TriangleList2D.get(r).c);
-            }
+          double z = interpolateDepth(new Point2D(x, y,0), pointsList, depths);
+          //System.out.println(z+ " " + zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)]);
+          if((z-cameraZ) < zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)]){
+            zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)] = (z-cameraZ);
+            set(scDiv2+x-1,(scDiv2-y)-1,color((int)TriangleList2D.get(r).c.x,(int)TriangleList2D.get(r).c.y,(int)TriangleList2D.get(r).c.z));
           }
         }
       }
     }
-    // border for the screen cause coulors bunch near the edge cause of my subpar edge culling skills
+    // border for the screen cause colours bunch near the edge due to my subpar edge culling skills
     for(int x = 0; x < intScreenSize; x++){
       set(0,x,color(0,0,0));
       set(x,intScreenSize-1,color(0,0,0));
       set(intScreenSize-2,x,color(0,0,0));
     }
   }
+  }
 
   public void renderInOrder(){
     // Clear all lists and buffers
     TriangleList2D.clear();
     TriangleList3D.clear();
-    for(int x = 0; x < zBuffer.length; x++){
-      zBuffer[x] =  Float.POSITIVE_INFINITY;
+    for(int x = 0; x < intScreenSize*intScreenSize; x++){
+      zBuffer[x] =  Double.POSITIVE_INFINITY;
     }
     // Add the scene
     addScene();
@@ -441,8 +453,14 @@ public class Rendering extends PApplet {
     playerYPos += playerYVel*deltaTime;
     playerXPos += playerXVel*deltaTime;
     playerZPos += playerZVel*deltaTime;
-    playerXVel *= 0.92*deltaTime;
-    playerZVel *= 0.92*deltaTime;
+    playerXVel *= 0.92/deltaTime;
+    playerZVel *= 0.92/deltaTime;
+    if(playerXVel < 0.1 && playerXVel > -0.1){
+      playerXVel = 0;
+    }
+    if(playerZVel < 0.1 && playerZVel > -0.1){
+      playerZVel = 0;
+    }
     
 
     if(cameraY < 100 - playerHeight){
@@ -462,14 +480,14 @@ public class Rendering extends PApplet {
 
   // Objects are defined here
 
-  public void addCube(Point3D minPoint, Point3D maxPoint, int colour1, int colour2, int colour3, int colour4, int colour5, int colour6, Point3D Rotation){
+  public void addCube(Point3D minPoint, Point3D maxPoint, Point3D colour1, Point3D colour2, Point3D colour3, Point3D colour4, Point3D colour5, Point3D colour6, Point3D Rotation){
     Point3D[] PointList = new Point3D[8];
-    int[] colourList = new int[6];
+    Point3D[] colourList = new Point3D[6];
     for(int x = 0; x < 8; x++){
       // Defining a new point cause it doesnt work otherwise
       PointList[x] = new Point3D(0,0,0);
     }
-    int[][] Connections = {{0,1,2}, {1,2,3}, {2,3,7}, {2,6,7}, {1,3,7}, {1,5,7}, {4,5,7}, {4,6,7}, {0,4,6}, {0,2,6}, {0,1,5}, {0,4,5}};
+    int[][] Connections = {{2,3,1},{1,0,2},{6,2,0},{0,4,6},{0,1,5},{5,4,0},{3,7,5},{5,1,3},{6,7,3},{3,2,6},{7,6,4},{4,5,7}};
     colourList[0] = colour1;
     colourList[1] = colour2;
     colourList[2] = colour3;
@@ -487,58 +505,57 @@ public class Rendering extends PApplet {
     double averageZ = 0;
 
     for(int x = 0; x < 4; x += 1){
-      PointList[x*2].x = minX;
-      PointList[x*2+1].x = maxX;
-      PointList[(int)Math.floor(x/2)*2+x].y = minY;
-      PointList[(int)Math.floor(x/2)*2+x+2].y = maxY;
+      PointList[x*2].x = maxX;
+      PointList[x*2+1].x = minX;
+      PointList[(int)(x/2)*2+x].y = maxY;
+      PointList[(int)(x/2)*2+x+2].y = minY;
       PointList[x].z = minZ;
       PointList[x+4].z = maxZ;
     }
     for(int x = 0; x < 8; x++){
       rotatePoint(PointList[x], -mouseRotationX, 0, -mouseRotationY);
-      averageX += PointList[x].x;
-      averageY += PointList[x].y;
-      averageZ += PointList[x].z;
     }
-    averageX /= 8;
-    averageY /= 8;
-    averageZ /= 8;
-    for(int l = 0; l < 8; l++){
-      rotateAroundPoint(new Point3D(averageX, averageY, averageZ), PointList[l], new Point3D(Rotation.x, Rotation.y, Rotation.z));
-    }
-    for(int a = 0; a < 12; a++){
+    for(int a = 0; a < Connections.length; a++){
       Point3D p1 = PointList[Connections[a][0]];
       Point3D p2 = PointList[Connections[a][1]];
       Point3D p3 = PointList[Connections[a][2]];
-      TriangleList3D.add(new Triangle3D(p1,p2,p3,colourList[(int)a/2]));
+      Point3D Norm = new Point3D((p2.y-p1.y)*(p3.z-p2.z)-(p2.z-p1.z)*(p3.y-p2.y), 
+                                 (p2.z-p1.z)*(p3.x-p2.x)-(p2.x-p1.x)*(p3.z-p2.z), 
+                                 (p2.x-p1.x)*(p3.y-p2.y)-(p2.y-p1.y)*(p3.x-p2.x));
+      TriangleList3D.add(new Triangle3D(p1,p2,p3,Norm,colourList[a/2]));
     }
   }
 
-  public void addTriangle(Point3D p1, Point3D p2, Point3D p3, int colour){  
+  public void addTriangle(Point3D p1, Point3D p2, Point3D p3, Point3D colour){  
     rotatePoint(p1, -mouseRotationX, 0, -mouseRotationY);
     rotatePoint(p2, -mouseRotationX, 0, -mouseRotationY);
     rotatePoint(p3, -mouseRotationX, 0, -mouseRotationY);
-    TriangleList3D.add(new Triangle3D(p1,p2,p3,colour));
+    Point3D Norm = new Point3D((p2.y-p1.y)*(p3.z-p2.z)-(p2.z-p1.z)*(p3.y-p2.y), 
+                               (p2.z-p1.z)*(p3.x-p2.x)-(p2.x-p1.x)*(p3.z-p2.z), 
+                               (p2.x-p1.x)*(p3.y-p2.y)-(p2.y-p1.y)*(p3.x-p2.x));
+    TriangleList3D.add(new Triangle3D(p1,p2,p3,Norm,colour));
 }
 
   // The current scene. Objects added go in here.
   public void addScene(){
-    addCube(new Point3D(-100, -100, 200), 
-            new Point3D(100, 100, 400), 
-            color(0,0,255),
-            color(255,255,255),
-            color(255,255,0),
-            color(0,128,0),
-            color(255,165,0),
-            color(255,0,0),
+    addCube(new Point3D(-50, 0, 250), 
+            new Point3D(50, 100, 350), 
+            new Point3D(10,100,100),
+            new Point3D(100,10,100),
+            new Point3D(100,100,10),
+            new Point3D(100,10,10),
+            new Point3D(10,10,100),
+            new Point3D(120,203,100),
             new Point3D(0,0,0));
-    addTriangle(new Point3D(1000, 100, 1000), 
-            new Point3D(1000, 100, -1000),
+
+    // Floor plane
+    /*addTriangle(new Point3D(1000, 100, 1000), 
             new Point3D(-1000, 100, 1000), 
-            color(200,200,200));
-    addTriangle(new Point3D(-1000, 100, -1000), 
             new Point3D(1000, 100, -1000),
+            new Point3D(200,200,200));
+    addTriangle(new Point3D(1000, 100, -1000), 
+            new Point3D(-1000, 100, -1000),
             new Point3D(-1000, 100, 1000), 
-            color(200,200,200));
+            new Point3D(200,200,200));*/
   }
 }
