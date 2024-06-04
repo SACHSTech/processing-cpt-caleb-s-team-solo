@@ -2,6 +2,9 @@ public class Triangle3D {
     Point3D p1;
     Point3D p2;
     Point3D p3;
+    Point3D p1o;
+    Point3D p2o;
+    Point3D p3o;
     Point3D c;
     Point3D n;
     Triangle3D(Point3D p1, Point3D p2, Point3D p3, Point3D colour){
