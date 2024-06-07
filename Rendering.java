@@ -28,14 +28,16 @@ public class Rendering extends PApplet {
   double mouseCenteredX = 0;
   double mouseCenteredY = 0;
   double mouseSensitivity = 180;
-  double[][] zBuffer = new double[intScreenSize*intScreenSize][7]; // 0 stores z, 1-3 stores colour, 4-6 stores normal(for lighting and stuff)
+  double[] zBuffer = new double[intScreenSize*intScreenSize];
+  Point3D[][] frameBuffer = new Point3D[intScreenSize*intScreenSize][4];
   List<Triangle3D> TriangleList3D = new ArrayList<>();
+  List<BlankTriangle3D> HitBoxList = new ArrayList<>(); // used for shadows and used for hitboxes
   List<Triangle2D> TriangleList2D = new ArrayList<>();
-  int[] arr = new int[5];
     // Lighting stuff
   double ambientLightStrength = 0.1;
-  Point3D lightPosition = new Point3D(100, -300, 0);
-  Point3D lightColour = new Point3D(255,255,255);
+  Point3D ambientLightColor = new Point3D(255,255,255);
+  Point3D skyColour = new Point3D(0,0,255);
+  List<Point3D[]> LightSources = new ArrayList<>();
 
   // Player stuff
   double playerHeight = 100;
@@ -70,7 +72,7 @@ public class Rendering extends PApplet {
   }
 
   // Initialization ends here
-  int lightx = 0;
+  double lightY = 0; 
   public void draw() {
     // Makes sure deltaTime never goes > 1(random accelleration, higher than expected speed, ect)
     if(frameRate > 60){
@@ -81,10 +83,13 @@ public class Rendering extends PApplet {
     cursorMovement();
     moveChar();
     renderInOrder();
-    lightPosition.y = 300*sin((float)Math.toRadians(lightx));
-    lightx++;
     //projectPoints();
     //drawLines(); // For testing purposes only
+      System.out.println("(" + frameBuffer[179700][0].x + "," + frameBuffer[179700][0].y + "," + frameBuffer[179700][0].z + ")");
+      System.out.println("(" + frameBuffer[179700][1].x + "," + frameBuffer[179700][1].y + "," + frameBuffer[179700][1].z + ")");
+      System.out.println("(" + frameBuffer[179700][2].x + "," + frameBuffer[179700][2].y + "," + frameBuffer[179700][2].z + ")");
+      System.out.println("(" + frameBuffer[179700][3].x + "," + frameBuffer[179700][3].y + "," + frameBuffer[179700][3].z + ")");
+      System.out.println();
   }
 
   // 3D framework starts here
@@ -95,9 +100,9 @@ public class Rendering extends PApplet {
       float x1 = a+(float)TriangleList2D.get(x).p1.x;
       float x2 = a+(float)TriangleList2D.get(x).p2.x;
       float x3 = a+(float)TriangleList2D.get(x).p3.x;
-      float y1 = a-(float)TriangleList2D.get(x).p1.y;
-      float y2 = a-(float)TriangleList2D.get(x).p2.y;
-      float y3 = a-(float)TriangleList2D.get(x).p3.y;
+      float y1 = a+(float)TriangleList2D.get(x).p1.y;
+      float y2 = a+(float)TriangleList2D.get(x).p2.y;
+      float y3 = a+(float)TriangleList2D.get(x).p3.y;
       line(x1,y1,x2,y2);
       line(x2,y2,x3,y3);
       line(x3,y3,x1,y1);
@@ -124,7 +129,7 @@ public class Rendering extends PApplet {
       }
     }
 
-    // Equation made by me strugling way too much stuff on desmos
+    // Equation made by me strugling way too much on desmos
     coords[order[0]] = ((coordsList[1][0]-b-m*a)*coordsList[0][1]-(coordsList[1][1]-b-m*a)*coordsList[0][0])/(m*coordsList[0][1]-m*coordsList[0][0]-coordsList[1][1]+coordsList[1][0]);
     // Litterally just y = mx except no +b because the FoV is always centered on the 0,0,0 camera.
     coords[order[1]] = m*(coords[order[0]]+a)+b;
@@ -191,6 +196,7 @@ public class Rendering extends PApplet {
       else if(whatsOut.size() == 0){
         // Keep the same triangle
         TriangleList3DTemp.add(TriangleList3D.get(count));
+        TriangleList3DTemp.get(TriangleList3DTemp.size()-1).n = normal;
       }
     }
     TriangleList3D.clear();
@@ -312,78 +318,81 @@ public class Rendering extends PApplet {
       int yMax = (int)Math.max(Math.max(p1.y, p2.y),p3.y);
       int xMin = (int)Math.min(Math.min(p1.x, p2.x),p3.x);
       int xMax = (int)Math.max(Math.max(p1.x, p2.x),p3.x);
+      if(xMax > scDiv2){
+        xMax = scDiv2;
+      }
+      if(xMin < -scDiv2){
+        xMin = -scDiv2;
+      }
+      if(yMax > scDiv2){
+        yMax = scDiv2;
+      }
+      if(yMin < -scDiv2){
+        yMin = -scDiv2;
+      }
       Point3D normal = TriangleList2D.get(r).n;
       double nLength = Math.sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);
-      Point3D newNormal = new Point3D(normal.x/nLength,normal.y/nLength,normal.z/nLength);
-      Point3D colour = TriangleList2D.get(r).c;
-      int count2 = 0; // test thing, delete later
       for(int x = xMin; x < xMax; x++){
         for(int y = yMin; y < yMax; y++){
+
           double A1 = area (x, y, x2, y2, x3, y3);
           double A2 = area (x1, y1, x, y, x3, y3);
           double A3 = area (x1, y1, x2, y2, x, y);
           if((int)A == (int)(A1 + A2 + A3)){
-            double z = interpolateDepth(new Point2D(x, y,0), pointsList, new int[] {z1,z2,z3});
-            if((z-cameraZ) < zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][0]){
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][0] = (z-cameraZ);
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][1] = colour.x;
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][2] = colour.y;
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][3] = colour.z;
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][4] = newNormal.x;
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][5] = newNormal.y;
-              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)][6] = newNormal.z;
+            double z;
+            if(z1 == z2 && z2 == z3){
+              z = z1;
+              
+            }
+            else{
+              z = interpolateDepth(new Point2D(x, y,0), pointsList, new int[] {z1,z2,z3});
+            }
+            if((z-cameraZ) < 3000 && (z-cameraZ) < zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)]){
+              zBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)] = (z-cameraZ);
+              // "Let there be light" ahh code
+              Point3D pColor = new Point3D(TriangleList2D.get(r).c.x/255,TriangleList2D.get(r).c.y/255,TriangleList2D.get(r).c.z/255);
+              Point3D diffuseLight = new Point3D(0,0,0);
+              Point3D originalPoint = new Point3D(-(x * (z - cameraZ)) / dblFocalLength + cameraX,-(y * (z - cameraZ)) / dblFocalLength + cameraY, z);
+              originalPoint = ReverseRotatePoint(originalPoint, -mouseRotationX, 0, -mouseRotationY);
+              Point3D newNormal = new Point3D(normal.x/nLength,normal.y/nLength,normal.z/nLength);
+              frameBuffer[((scDiv2-y)-1)*intScreenSize+(scDiv2+x)] = new Point3D[] {originalPoint, ReverseRotatePoint(TriangleList3D.get(r).p1, -mouseRotationX, 0, -mouseRotationY),ReverseRotatePoint(TriangleList3D.get(r).p2, -mouseRotationX, 0, -mouseRotationY),ReverseRotatePoint(TriangleList3D.get(r).p3, -mouseRotationX, 0, -mouseRotationY)};
+              for(int lightCount = 0; lightCount < LightSources.size(); lightCount++){
+                Point3D lightPosition = LightSources.get(lightCount)[0];
+                Point3D lightColour = LightSources.get(lightCount)[1];
+                double diffuseLightStrength = LightSources.get(lightCount)[2].x;
+                Point3D newLightColour = new Point3D(lightColour.x/255, lightColour.y/255, lightColour.z/255);
+                Point3D lightDirection = new Point3D(lightPosition.x-originalPoint.x, lightPosition.y-originalPoint.y, lightPosition.z-originalPoint.z); 
+                double lLength = Math.sqrt(lightDirection.x*lightDirection.x+lightDirection.y*lightDirection.y+lightDirection.z*lightDirection.z);
+                lightDirection = new Point3D(lightDirection.x/lLength,lightDirection.y/lLength,lightDirection.z/lLength);
+                double diffuseLightFactor = Math.abs(lightDirection.x*newNormal.x+lightDirection.y*newNormal.y+lightDirection.z*newNormal.z);
+
+                diffuseLight.x += (diffuseLightFactor*newLightColour.x)*(diffuseLightStrength/lLength);
+                diffuseLight.y += (diffuseLightFactor*newLightColour.y)*(diffuseLightStrength/lLength);
+                diffuseLight.z += (diffuseLightFactor*newLightColour.z)*(diffuseLightStrength/lLength);
+            }
+
+
+
+              // Ambient Light
+              Point3D ambientLight = new Point3D(ambientLightColor.x*ambientLightStrength/255,ambientLightColor.y*ambientLightStrength/255,ambientLightColor.z*ambientLightStrength/255);
+              
+              // Adding light
+              pColor.x = Math.abs(pColor.x*255.0*(diffuseLight.x+ambientLight.x));
+              pColor.y = Math.abs(pColor.y*255.0*(diffuseLight.y+ambientLight.y));
+              pColor.z = Math.abs(pColor.z*255.0*(diffuseLight.z+ambientLight.z));
+              //int c = color((int)(TriangleList2D.get(r).c.x), (int)(TriangleList2D.get(r).c.y), (int)(TriangleList2D.get(r).c.z));
+              int c = color((int)pColor.x,(int)pColor.y,(int)pColor.z);
+              if(x == 0 && y == 0){
+                set(scDiv2+x,scDiv2+y+1,color(255,255,255));
+              } 
+              else{
+              set(scDiv2+x,(scDiv2+y)+1,c);
+              }
             }
           }
         }
       }
     }
-    int count2 = 0;
-    for(int i = 0; i < zBuffer.length; i++){
-      // "Let there be light" ahh code
-      if (zBuffer[i][0] < 1000){
-        double x = i%intScreenSize-scDiv2;
-        double y = (i%intScreenSize-i)/intScreenSize-1+scDiv2;
-        double z = zBuffer[i][0];
-        Point3D c = new Point3D(zBuffer[i][1], zBuffer[i][2], zBuffer[i][3]);
-        Point3D n = new Point3D(zBuffer[i][4], zBuffer[i][5], zBuffer[i][6]);
-        Point3D newLightColour = new Point3D(lightColour.x/255, lightColour.y/255, lightColour.z/255);
-        Point3D originalPoint = new Point3D((-x*(z-cameraZ))/dblFocalLength + cameraX,(-y*(z-cameraZ))/dblFocalLength + cameraY, z);
-        if(count2 == 0){
-          System.out.println(originalPoint.x);
-        }
-        originalPoint = ReverseRotatePoint(originalPoint, -mouseRotationX, 0, mouseRotationY);
-        
-        count2++;
-        Point3D lightDirection = new Point3D(originalPoint.x-lightPosition.x, originalPoint.y-lightPosition.y, originalPoint.z-lightPosition.z); 
-        Point3D lColor = new Point3D(c.x/255,c.y/255,c.z/255);
-        // Ambient Light
-        Point3D ambientLight = new Point3D(newLightColour.x*ambientLightStrength,newLightColour.y*ambientLightStrength,newLightColour.z*ambientLightStrength);
-
-        // Light Diffusion
-        double lLength = Math.sqrt(lightDirection.x*lightDirection.x+lightDirection.y*lightDirection.y+lightDirection.z*lightDirection.z);
-        
-        lightDirection = new Point3D(lightDirection.x/lLength,lightDirection.y/lLength,lightDirection.z/lLength);
-        Point3D diffuseLight;
-        double diffuseLightFactor = lightDirection.x*n.x+lightDirection.y*n.y+lightDirection.z*n.z;
-        if (Math.toDegrees(Math.acos(diffuseLightFactor)) < 0){
-          diffuseLight = new Point3D(0,0,0);
-        }
-        else{
-            diffuseLight = new Point3D(diffuseLightFactor*newLightColour.x, diffuseLightFactor*newLightColour.y, diffuseLightFactor*newLightColour.z);
-        }
-
-
-        // Adding light
-        lColor.x = Math.abs(lColor.x*255.0*(diffuseLight.x+ambientLight.x));
-        lColor.y = Math.abs(lColor.y*255.0*(diffuseLight.y+ambientLight.y));
-        lColor.z = Math.abs(lColor.z*255.0*(diffuseLight.z+ambientLight.z));
-
-        //int c = color((int)(TriangleList2D.get(r).c.x), (int)(TriangleList2D.get(r).c.y), (int)(TriangleList2D.get(r).c.z));
-        int co = color((int)lColor.x,(int)lColor.y,(int)lColor.z);
-        set((int)x+scDiv2,((int)y)+1+scDiv2,co);
-      }
-    }
-
     // border for the screen cause coulors bunch near the edge cause of my subpar edge culling skills
     for(int x = 0; x < intScreenSize; x++){
       set(0,x,color(0,0,0));
@@ -396,8 +405,10 @@ public class Rendering extends PApplet {
     // Clear all lists and buffers
     TriangleList2D.clear();
     TriangleList3D.clear();
+    LightSources.clear();
     for(int x = 0; x < zBuffer.length; x++){
-      zBuffer[x][0] =  Float.POSITIVE_INFINITY;
+      zBuffer[x] =  Float.POSITIVE_INFINITY;
+      frameBuffer[x] = new Point3D[]{new Point3D(0,0,0),new Point3D(0,0,0),new Point3D(0,0,0),new Point3D(0,0,0)};
     }
     // Add the scene
     addScene();
@@ -417,7 +428,7 @@ public class Rendering extends PApplet {
       mouseCenteredY = mouseY;
     }
     mouseRotationX += (mouseSensitivity*(mouseX - mouseCenteredX))/(scDiv2);
-    mouseRotationY += (mouseSensitivity*(mouseY - mouseCenteredY))/(scDiv2);
+    mouseRotationY -= (mouseSensitivity*(mouseY - mouseCenteredY))/(scDiv2);
     if(mouseRotationX >= 360){
       mouseRotationX %= -360;
     }
@@ -454,13 +465,13 @@ public class Rendering extends PApplet {
   public void moveChar() {
     // If statements. Lots of em.
     double rotA = Math.toRadians(mouseRotationY);
-    double rotB = Math.toRadians(-mouseRotationX);
+    double rotB = Math.toRadians(mouseRotationX);
     double a = Math.toRadians(90);
     double zVelStore = 0;
     double xVelStore = 0;
     if(isKeyPressed[(int)'w']){
       zVelStore += playerSpeed*Math.cos(rotB);
-      xVelStore += playerSpeed*Math.sin(rotB);
+      xVelStore += -playerSpeed*Math.sin(rotB);
 
       // Commented code for "flight" while testing
       //cameraZ += playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
@@ -468,19 +479,19 @@ public class Rendering extends PApplet {
       //cameraY += playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'s']){
-      zVelStore -= playerSpeed*Math.cos(rotB);
-      xVelStore -= playerSpeed*Math.sin(rotB);
+      zVelStore += -playerSpeed*Math.cos(rotB);
+      xVelStore += playerSpeed*Math.sin(rotB);
       //cameraZ -= playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
       //cameraX -= playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
       //cameraY -= playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'a']){
-      zVelStore -= playerSpeed*Math.sin(rotB);
+      zVelStore += playerSpeed*Math.sin(rotB);
       xVelStore += playerSpeed*Math.cos(rotB);
     }
     if(isKeyPressed[(int)'d']){
-      zVelStore += playerSpeed*Math.sin(rotB);
-      xVelStore -= playerSpeed*Math.cos(rotB);
+      zVelStore += -playerSpeed*Math.sin(rotB);
+      xVelStore += -playerSpeed*Math.cos(rotB);
     }
     if(zVelStore != 0){
       playerZVel = zVelStore;
@@ -526,7 +537,7 @@ public class Rendering extends PApplet {
     }
     
 
-    if(cameraY > -100 + playerHeight){
+    if(cameraY > 100 - playerHeight){
       playerYVel -= 0.2*(60/frameRate);
     }
     else{
@@ -543,7 +554,7 @@ public class Rendering extends PApplet {
 
   // Objects are defined here
 
-  public void addCube(Point3D minPoint, Point3D maxPoint, Point3D colour1, Point3D colour2, Point3D colour3, Point3D colour4, Point3D colour5, Point3D colour6, Point3D Rotation){
+  public void addCube(Point3D minPoint, Point3D maxPoint, Point3D colour1, Point3D colour2, Point3D colour3, Point3D colour4, Point3D colour5, Point3D colour6){
     Point3D[] PointList = new Point3D[8];
     Point3D[] colourList = new Point3D[6];
     for(int x = 0; x < 8; x++){
@@ -565,77 +576,70 @@ public class Rendering extends PApplet {
     double maxZ = maxPoint.z;
 
     for(int x = 0; x < 4; x += 1){
-      PointList[x*2].x = minX;
-      PointList[x*2+1].x = maxX;
-      PointList[(x/2)*2+x].y = minY;
-      PointList[(x/2)*2+x+2].y = maxY;
+      PointList[x*2].x = maxX;
+      PointList[x*2+1].x = minX;
+      PointList[(x/2)*2+x].y = maxY;
+      PointList[(x/2)*2+x+2].y = minY;
       PointList[x].z = minZ;
       PointList[x+4].z = maxZ;
     }
-    for(int x = 0; x < 8; x++){
-      PointList[x] = rotatePoint(PointList[x], -mouseRotationX, 0, mouseRotationY);
-
-    }
+    // Pre-rotation, for hitboxes
     for(int a = 0; a < Connections.length; a++){
       Point3D p1 = PointList[Connections[a][0]];
       Point3D p2 = PointList[Connections[a][1]];
       Point3D p3 = PointList[Connections[a][2]];
+      HitBoxList.add(new BlankTriangle3D(p1,p2,p3)); 
+    }
+    for(int x = 0; x < 8; x++){
+      PointList[x] = rotatePoint(PointList[x], -mouseRotationX, 0, -mouseRotationY);
+    }
+    // Post-rotation, for the display itself.
+    for(int a = 0; a < Connections.length; a++){
+      Point3D p1 = PointList[Connections[a][0]];
+      Point3D p2 = PointList[Connections[a][1]];
+      Point3D p3 = PointList[Connections[a][2]];
+      Point3D p1o = ReverseRotatePoint(p1,-mouseRotationX, 0, -mouseRotationY);
+      Point3D p2o = ReverseRotatePoint(p2,-mouseRotationX, 0, -mouseRotationY);
+      Point3D p3o = ReverseRotatePoint(p3,-mouseRotationX, 0, -mouseRotationY);
+      Point3D v1 = new Point3D(p2o.x-p1o.x,p2o.y-p1o.y,p2o.z-p1o.z);
+      Point3D v2 = new Point3D(p3o.x-p1o.x,p3o.y-p1o.y,p3o.z-p1o.z);
       TriangleList3D.add(new Triangle3D(p1,p2,p3,colourList[(int)a/2]));
-      TriangleList3D.get(TriangleList3D.size()-1).n.x = (((TriangleList3D.get(TriangleList3D.size()-1).n.x-cameraX) * (dblFocalLength)) / ((TriangleList3D.get(TriangleList3D.size()-1).n.z-cameraZ)));
-      TriangleList3D.get(TriangleList3D.size()-1).n.y = (((TriangleList3D.get(TriangleList3D.size()-1).n.y-cameraY) * (dblFocalLength)) / ((TriangleList3D.get(TriangleList3D.size()-1).n.z-cameraZ)));
-      // Backface culling :)
-      if(TriangleList3D.get(TriangleList3D.size()-1).n.z > 0){
-        TriangleList3D.remove(TriangleList3D.size()-1);
-      }
-      else{
-        // terrible code, i cant do more math today so this is a messy sollution
-        Point3D p1o = ReverseRotatePoint(p1,-mouseRotationX, 0, mouseRotationY);
-        Point3D p2o = ReverseRotatePoint(p2,-mouseRotationX, 0, mouseRotationY);
-        Point3D p3o = ReverseRotatePoint(p3,-mouseRotationX, 0, mouseRotationY);
-        Point3D v1 = new Point3D(p2o.x-p1o.x,p2o.y-p1o.y,p2o.z-p1o.z);
-        Point3D v2 = new Point3D(p3o.x-p1o.x,p3o.y-p1o.y,p3o.z-p1o.z);
-        TriangleList3D.get(TriangleList3D.size()-1).n = new Point3D(Math.round((v1.y*v2.z-v1.z*v2.y)*100.0)/100.0,Math.round((v1.z*v2.x-v1.x*v2.z)*100.0)/100.0,Math.round((v1.x*v2.y-v1.y*v2.x)*100.0)/100.0);
-      }
+      TriangleList3D.get(TriangleList3D.size()-1).n = new Point3D(Math.round((v1.y*v2.z-v1.z*v2.y)*100.0)/100.0,Math.round((v1.z*v2.x-v1.x*v2.z)*100.0)/100.0,Math.round((v1.x*v2.y-v1.y*v2.x)*100.0)/100.0);
     }
   }
 
   public void addTriangle(Point3D p1o, Point3D p2o, Point3D p3o, Point3D colour){  
-    Point3D p1 = rotatePoint(p1o, -mouseRotationX, 0, mouseRotationY);
-    Point3D p2 = rotatePoint(p2o, -mouseRotationX, 0, mouseRotationY);
-    Point3D p3 = rotatePoint(p3o, -mouseRotationX, 0, mouseRotationY);
+    Point3D p1 = rotatePoint(p1o, -mouseRotationX, 0, -mouseRotationY);
+    Point3D p2 = rotatePoint(p2o, -mouseRotationX, 0, -mouseRotationY);
+    Point3D p3 = rotatePoint(p3o, -mouseRotationX, 0, -mouseRotationY);
     TriangleList3D.add(new Triangle3D(p1,p2,p3,colour));
-    Point3D v1 = new Point3D(TriangleList3D.get(TriangleList3D.size()).p2o.x-TriangleList3D.get(TriangleList3D.size()).p1o.x,TriangleList3D.get(TriangleList3D.size()).p2o.y-TriangleList3D.get(TriangleList3D.size()).p1o.y,TriangleList3D.get(TriangleList3D.size()).p2o.z-TriangleList3D.get(TriangleList3D.size()).p1o.z);
-    Point3D v2 = new Point3D(TriangleList3D.get(TriangleList3D.size()).p3o.x-TriangleList3D.get(TriangleList3D.size()).p1o.x,TriangleList3D.get(TriangleList3D.size()).p3o.y-TriangleList3D.get(TriangleList3D.size()).p1o.y,TriangleList3D.get(TriangleList3D.size()).p3o.z-TriangleList3D.get(TriangleList3D.size()).p1o.z);
+    Point3D v1 = new Point3D(p2o.x-p1o.x,p2o.y-p1o.y,p2o.z-p1o.z);
+    Point3D v2 = new Point3D(p3o.x-p1o.x,p3o.y-p1o.y,p3o.z-p1o.z);
     TriangleList3D.get(TriangleList3D.size()-1).n = new Point3D(v1.y*v2.z-v1.z*v2.y,v1.z*v2.x-v1.x*v2.z,v1.x*v2.y-v1.y*v2.x);
-}
+  }
+
+  public void addLight(Point3D L, Point3D colour, Point3D misc){
+    //L: worldspace position
+    //colour: colour of the light in terms of color(colour.x, colour.y, colour.z)
+    //misc: x = lightstrength, y = size of cube, z = blank
+    LightSources.add(new Point3D[] {L,colour,misc});
+    addCube(new Point3D(L.x+misc.y, L.y+misc.y, L.z+misc.y), 
+            new Point3D(L.x-misc.y,L.y-misc.y,L.z-misc.y), 
+            colour,
+            colour,
+            colour,
+            colour,
+            colour,
+            colour);
+  }
 
   // The current scene. Objects added go in here.
   public void addScene(){
-    addCube(new Point3D(-100, -100, 200), 
-            new Point3D(100, 100, 400), 
-            new Point3D(0,0,255),
-            new Point3D(255,255,255),
-            new Point3D(255,255,0),
-            new Point3D(0,128,0),
-            new Point3D(255,165,0),
-            new Point3D(255,0,0),
-            new Point3D(0,0,0));
-    addCube(new Point3D(lightPosition.x-5, lightPosition.y-5, lightPosition.z-5), 
-            new Point3D(lightPosition.x+5, lightPosition.y+5, lightPosition.z+5), 
-            new Point3D(255,255,255),
-            new Point3D(255,255,255),
-            new Point3D(255,255,255),
-            new Point3D(255,255,255),
-            new Point3D(255,255,255),
-            new Point3D(255,255,255),
-            new Point3D(0,0,0));
-    /*addTriangle(new Point3D(1000, 100, 1000), 
-            new Point3D(1000, 100, -1000),
-            new Point3D(-1000, 100, 1000), 
-            new Point3D(200,200,200));
-    addTriangle(new Point3D(-1000, 100, -1000), 
-            new Point3D(1000, 100, -1000),
-            new Point3D(-1000, 100, 1000), 
-            new Point3D(200,200,200));*/
+
+    addTriangle(new Point3D(1000, -100, 1000), 
+                new Point3D(1000, -100, -1000), 
+                new Point3D(-1000,-100,1000),
+                new Point3D(100,30,156));
+    addLight(new Point3D(300,0,200), new Point3D(255,255,255), new Point3D(100,5,0));
   }
 }
