@@ -82,6 +82,8 @@ public class Rendering extends PApplet {
     if(frameRate > 60){
       frameRate = 60;
     }
+    
+
     deltaTime = 60/frameRate;
     ID = 0;
     clear();
@@ -90,7 +92,11 @@ public class Rendering extends PApplet {
     moveChar();
     //projectPoints();
     //drawLines(); // For testing purposes only
-    System.out.println(frameRate);
+    if(isKeyPressed[(int)'f']){
+      fill(255, 255, 255);
+      textSize(18);
+      text("fps: " + Math.round(frameRate*100.0)/100.0, 20, 20); 
+    }
   }
 
   // 3D framework starts here
@@ -545,7 +551,7 @@ public class Rendering extends PApplet {
       playerYPos = ceiling-playerHeight-11;
     }
     if(playerYPos > floor+2){
-      playerYVel -= 0.2*(60/frameRate);
+      playerYVel -= 0.2*deltaTime;
     }
     else if(playerYPos < floor+2){
       playerYVel = 0;
