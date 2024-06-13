@@ -30,9 +30,11 @@ public class Rendering extends PApplet {
   double mouseSensitivity = 180;
   double[] zBuffer = new double[intScreenSize*intScreenSize];
   List<Triangle3D> TriangleList3D = new ArrayList<>();
-  List<BlankTriangle3D> HitBoxList = new ArrayList<>(); // used for shadows and used for hitboxes
+  // Emphasis on the box part, the hitboxes are non-rotatable rectangular prisms.
+  List<Point3D[]> HitBoxList = new ArrayList<>();
   List<Triangle2D> TriangleList2D = new ArrayList<>();
-    // Lighting stuff
+
+  // Lighting stuff
   double ambientLightStrength = 0.1;
   Point3D ambientLightColor = new Point3D(255,255,255);
   Point3D skyColour = new Point3D(0,0,255);
@@ -47,7 +49,9 @@ public class Rendering extends PApplet {
   double playerZVel = 0;
   double playerYVel = 0;
   double playerSpeed = 2;
-  double jumpHeight = 5;
+  double jumpHeight = 7;
+  double prevX = 0;
+  double prevZ = 0;
 
   // Other stuff
   double deltaTime = 60/frameRate;
@@ -82,10 +86,11 @@ public class Rendering extends PApplet {
     ID = 0;
     clear();
     cursorMovement();
-    moveChar();
     renderInOrder();
+    moveChar();
     //projectPoints();
-    drawLines(); // For testing purposes only
+    //drawLines(); // For testing purposes only
+    System.out.println(frameRate);
   }
 
   // 3D framework starts here
@@ -284,6 +289,7 @@ public class Rendering extends PApplet {
     double l1 = area(p1.x,p1.y,p2.x,p2.y,point.x,point.y)/tA;
     double l2 = area(p1.x,p1.y,p3.x,p3.y,point.x,point.y)/tA;
     double l3 = area(p3.x,p3.y,p2.x,p2.y,point.x,point.y)/tA;
+    // Took me over 5 days of multiple hours each to debug this one line :(
     double interpolatedDepth = 1/(l1*(1/(depths[2]-cameraZ))+l2*(1/(depths[1]-cameraZ))+l3*(1/(depths[0]-cameraZ))) + cameraZ;
     return interpolatedDepth;
   }
@@ -295,18 +301,8 @@ public class Rendering extends PApplet {
     cullTriangles(-intScreenSize/(2*dblFocalLength),cameraY, -cameraZ, new int[]{2,1,0},-1);
   }
 
-  public boolean lineIntersectsAllTriangles(Point3D p1, Point3D p2, int faceNumber){
-    boolean intersects = false;
-    for(int x = 0; x < HitBoxList.size(); x++){
-      // Prevents it coliding with itself
-      if(HitBoxList.get(x).id != faceNumber){
-        Point3D v1 = HitBoxList.get(x).p1;
-        Point3D v2 = HitBoxList.get(x).p2;
-        Point3D v3 = HitBoxList.get(x).p3;
-        double v = area(v1.x,v1.y,v2.x,v2.y,v3.x,v3.y);
-      }
-    }
-    return intersects;
+  public double area3D(Point3D p1, Point3D p2, Point3D p3){
+    return Math.sqrt(Math.pow((p1.y-p2.y)*(p1.z-p3.z)-(p1.z-p2.z)*(p1.y-p3.y), 2)+Math.pow((p1.z-p2.z)*(p1.x-p3.x)-(p1.x-p2.x)*(p1.z-p3.z), 2)+Math.pow((p1.x-p2.x)*(p1.y-p3.y)-(p1.y-p2.y)*(p1.x-p3.x), 2))/2.0;
   }
 
   public void drawFaces(){
@@ -369,15 +365,11 @@ public class Rendering extends PApplet {
                 double lLength = Math.sqrt(lightDirection.x*lightDirection.x+lightDirection.y*lightDirection.y+lightDirection.z*lightDirection.z);
                 lightDirection = new Point3D(lightDirection.x/lLength,lightDirection.y/lLength,lightDirection.z/lLength);
                 double diffuseLightFactor = Math.abs(lightDirection.x*newNormal.x+lightDirection.y*newNormal.y+lightDirection.z*newNormal.z);
-                if(Math.toDegrees(Math.acos(diffuseLightFactor)) > 180){
-                  diffuseLightFactor = Math.cos(Math.acos(diffuseLightFactor-90)); 
-                }
                 diffuseLight.x += (diffuseLightFactor*newLightColour.x)*(diffuseLightStrength/lLength);
                 diffuseLight.y += (diffuseLightFactor*newLightColour.y)*(diffuseLightStrength/lLength);
                 diffuseLight.z += (diffuseLightFactor*newLightColour.z)*(diffuseLightStrength/lLength);
+
             }
-
-
 
               // Ambient Light
               Point3D ambientLight = new Point3D(ambientLightColor.x*ambientLightStrength/255,ambientLightColor.y*ambientLightStrength/255,ambientLightColor.z*ambientLightStrength/255);
@@ -407,6 +399,7 @@ public class Rendering extends PApplet {
     TriangleList2D.clear();
     TriangleList3D.clear();
     LightSources.clear();
+    HitBoxList.clear();
     for(int x = 0; x < zBuffer.length; x++){
       zBuffer[x] =  Float.POSITIVE_INFINITY;
     }
@@ -467,23 +460,16 @@ public class Rendering extends PApplet {
     double rotA = Math.toRadians(mouseRotationY);
     double rotB = Math.toRadians(mouseRotationX);
     double a = Math.toRadians(90);
+
     double zVelStore = 0;
     double xVelStore = 0;
     if(isKeyPressed[(int)'w']){
       zVelStore += playerSpeed*Math.cos(rotB);
       xVelStore += -playerSpeed*Math.sin(rotB);
-
-      // Commented code for "flight" while testing
-      //cameraZ += playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
-      //cameraX += playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
-      //cameraY += playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'s']){
       zVelStore += -playerSpeed*Math.cos(rotB);
       xVelStore += playerSpeed*Math.sin(rotB);
-      //cameraZ -= playerSpeed*(60/frameRate)*Math.cos(rotA)*Math.cos(rotB);
-      //cameraX -= playerSpeed*(60/frameRate)*Math.sin(rotA+a)*Math.cos(rotB+a);
-      //cameraY -= playerSpeed*(60/frameRate)*Math.sin(rotA);
     }
     if(isKeyPressed[(int)'a']){
       zVelStore += playerSpeed*Math.sin(rotB);
@@ -502,64 +488,86 @@ public class Rendering extends PApplet {
     if(isKeyPressed[(int)' '] && hasJump){
       playerYVel = jumpHeight;
       hasJump = false;
-    }
+    } 
 
     if(isKeyPressed[255]){
       playerSpeed = 5;
     }
     else{
-      playerSpeed = 2;
+      playerSpeed = 2.5;
     }
     // No running off the map :(
-    if(playerXPos > 950){
-      playerXPos = 950;
-    }
-    if(playerXPos < -950){
-      playerXPos = -950;
-    }
-    if(playerZPos > 950){
-      playerZPos = 950;
-    }
-    if(playerZPos < -950){
-      playerZPos = -950;
-    }
+    double floor = -50;
+    double ceiling = Double.POSITIVE_INFINITY;
+    boolean floorDecided = false;
+    for(int l = 0; l < HitBoxList.size(); l++){
+      Point3D min = HitBoxList.get(l)[0];
+      Point3D max = HitBoxList.get(l)[1];
+      
+      if(playerXPos+playerXVel*deltaTime+20 > min.x && playerXPos+playerXVel*deltaTime-20 < max.x && playerYPos+playerHeight+10 > min.y && playerYPos < max.y && playerZPos+20 > min.z && playerZPos-20 < max.z){
+        playerXVel = 0;
+      }
+      if(playerXPos+20 > min.x && playerXPos-20 < max.x && playerYPos+playerHeight+10 > min.y && playerYPos < max.y && playerZPos+playerZVel*deltaTime+20 > min.z && playerZPos+playerZVel*deltaTime-20 < max.z){
+        playerZVel = 0;
+      }
 
+      // Checks if you're in the box, sets the floor to the top of box if you are
+      if(playerXPos+18 > min.x && playerXPos-18 < max.x && playerZPos+18 > min.z && playerZPos-18 < max.z && playerYPos > min.y && playerYPos < max.y){
+        floor = max.y;
+        floorDecided = true;
+      }
+      // If not in a box, check if 1. the top of the box is below you and 2. if the top of the box is above the current floor 
+      else if(playerXPos+18 > min.x && playerXPos-18 < max.x && playerZPos+18 > min.z && playerZPos-18 < max.z && playerYPos > max.y && max.y > floor && !floorDecided){
+        floor = max.y;
+      }
+
+      if(playerXPos+18 > min.x && playerXPos-18 < max.x && playerZPos+18 > min.z && playerZPos-18 < max.z && playerYPos+playerHeight+10 < min.y && min.y < ceiling){
+        ceiling = min.y;
+      }
+
+    }
+    prevX = playerXPos;
+    prevZ = playerZPos;
     playerYPos += playerYVel*deltaTime;
     playerXPos += playerXVel*deltaTime;
     playerZPos += playerZVel*deltaTime;
     playerXVel *= 0.92/deltaTime;
     playerZVel *= 0.92/deltaTime;
+
     if(playerXVel < 0.1 && playerXVel > -0.1){
       playerXVel = 0;
     }
     if(playerZVel < 0.1 && playerZVel > -0.1){
       playerZVel = 0;
     }
-    
-
-    if(cameraY > 100 - playerHeight){
+    if(playerYPos+playerHeight+10 >= ceiling){
+      playerYVel = 0;
+      playerYPos = ceiling-playerHeight-11;
+    }
+    if(playerYPos > floor+2){
       playerYVel -= 0.2*(60/frameRate);
     }
-    else if(cameraY < 100 - playerHeight){
+    else if(playerYPos < floor+2){
       playerYVel = 0;
-      playerYPos = 100 - playerHeight;
+      playerYPos = floor+2;
       hasJump = true;
     }
     else{
       playerYVel = 0;
       hasJump = true;
     }
+    
 
     // Camera following
     cameraX = playerXPos;
     cameraZ = playerZPos;
-    cameraY = playerYPos;
+    cameraY = playerYPos+playerHeight;
 
   }
 
   // Objects are defined here
 
-  public void addCube(Point3D minPoint, Point3D maxPoint, Point3D colour1, Point3D colour2, Point3D colour3, Point3D colour4, Point3D colour5, Point3D colour6){
+  public void addCube(Point3D minPoint, Point3D maxPoint, Point3D colour1, Point3D colour2, Point3D colour3, Point3D colour4, Point3D colour5, Point3D colour6, boolean hitBox){
     Point3D[] PointList = new Point3D[8];
     Point3D[] colourList = new Point3D[6];
     for(int x = 0; x < 8; x++){
@@ -589,15 +597,10 @@ public class Rendering extends PApplet {
       PointList[x+4].z = maxZ;
     }
     // Pre-rotation, for hitboxes
-    for(int a = 0; a < Connections.length; a++){
-      Point3D p1 = PointList[Connections[a][0]];
-      Point3D p2 = PointList[Connections[a][1]];
-      Point3D p3 = PointList[Connections[a][2]];
-      HitBoxList.add(new BlankTriangle3D(p1,p2,p3,ID));
-      ID++;
+    if(hitBox){
+      HitBoxList.add(new Point3D[]{minPoint, maxPoint});
     }
-    // reset id for later use
-    ID -= Connections.length;
+
     for(int x = 0; x < 8; x++){
       PointList[x] = rotatePoint(PointList[x], -mouseRotationX, 0, -mouseRotationY);
     }
@@ -606,18 +609,21 @@ public class Rendering extends PApplet {
       Point3D p1 = PointList[Connections[a][0]];
       Point3D p2 = PointList[Connections[a][1]];
       Point3D p3 = PointList[Connections[a][2]];
-      Point3D v1 = new Point3D(p2.x-p1.x,p2.y-p1.y,p2.z-p1.z);
-      Point3D v2 = new Point3D(p3.x-p1.x,p3.y-p1.y,p3.z-p1.z);
+      Point3D p1P = new Point3D(-((p1.x-cameraX) * (dblFocalLength)) / ((p1.z-cameraZ)),-((p1.y-cameraY) * (dblFocalLength)) / ((p1.z-cameraZ)),0);
+      Point3D p2P = new Point3D(-((p2.x-cameraX) * (dblFocalLength)) / ((p2.z-cameraZ)),-((p2.y-cameraY) * (dblFocalLength)) / ((p2.z-cameraZ)),0);
+      Point3D p3P = new Point3D(-((p3.x-cameraX) * (dblFocalLength)) / ((p3.z-cameraZ)),-((p3.y-cameraY) * (dblFocalLength)) / ((p3.z-cameraZ)),0);
+      Point3D v1 = new Point3D(p2P.x-p1P.x,p2P.y-p1P.y,p2P.z-p1P.z);
+      Point3D v2 = new Point3D(p3P.x-p1P.x,p3P.y-p1P.y,p3P.z-p1P.z);
       Point3D p1o = ReverseRotatePoint(p1,-mouseRotationX, 0, -mouseRotationY);
       Point3D p2o = ReverseRotatePoint(p2,-mouseRotationX, 0, -mouseRotationY);
       Point3D p3o = ReverseRotatePoint(p3,-mouseRotationX, 0, -mouseRotationY);
       Point3D v1o = new Point3D(p2o.x-p1o.x,p2o.y-p1o.y,p2o.z-p1o.z);
       Point3D v2o = new Point3D(p3o.x-p1o.x,p3o.y-p1o.y,p3o.z-p1o.z);
-      if((((p1.x-cameraX) * dblFocalLength)/((p1.z-cameraZ)))*(((p2.y-cameraY) * dblFocalLength)/((p2.z-cameraZ)))-(((p1.y-cameraY) * dblFocalLength)/((p1.z-cameraZ)))*(((p2.x-cameraX) * dblFocalLength)/((p2.z-cameraZ))) < 0){
+
         TriangleList3D.add(new Triangle3D(p1,p2,p3,colourList[(int)a/2],ID));
         ID++;
         TriangleList3D.get(TriangleList3D.size()-1).n = new Point3D(Math.round((v1o.y*v2o.z-v1o.z*v2o.y)*100.0)/100.0,Math.round((v1o.z*v2o.x-v1o.x*v2o.z)*100.0)/100.0,Math.round((v1o.x*v2o.y-v1o.y*v2o.x)*100.0)/100.0);
-      }
+      
     }
   }
 
@@ -626,51 +632,63 @@ public class Rendering extends PApplet {
     Point3D p2 = rotatePoint(p2o, -mouseRotationX, 0, -mouseRotationY);
     Point3D p3 = rotatePoint(p3o, -mouseRotationX, 0, -mouseRotationY);
     TriangleList3D.add(new Triangle3D(p1,p2,p3,colour, ID));
-    HitBoxList.add(new BlankTriangle3D(p1o, p2o, p3o, ID));
     ID++;
     Point3D v1 = new Point3D(p2o.x-p1o.x,p2o.y-p1o.y,p2o.z-p1o.z);
     Point3D v2 = new Point3D(p3o.x-p1o.x,p3o.y-p1o.y,p3o.z-p1o.z);
-    TriangleList3D.get(TriangleList3D.size()-1).n = new Point3D(v1.y*v2.z-v1.z*v2.y,v1.z*v2.x-v1.x*v2.z,v1.x*v2.y-v1.y*v2.x);
+    Point3D n = new Point3D(v1.y*v2.z-v1.z*v2.y,v1.z*v2.x-v1.x*v2.z,v1.x*v2.y-v1.y*v2.x);
+    TriangleList3D.get(TriangleList3D.size()-1).n = n;
   }
 
   public void addLight(Point3D L, Point3D colour, Point3D misc){
     //L: worldspace position
     //colour: colour of the light in terms of color(colour.x, colour.y, colour.z)
-    //misc: x = lightstrength, y = size of cube, z = blank
+    //misc: x = lightstrength, y = size of cube, z = lightID
+
     LightSources.add(new Point3D[] {L,colour,misc});
     addCube(new Point3D(L.x+misc.y, L.y+misc.y, L.z+misc.y), 
-            new Point3D(L.x-misc.y,L.y-misc.y,L.z-misc.y), 
+            new Point3D(L.x-misc.y,L.y-misc.y,L.z-misc.y),
             colour,
             colour,
             colour,
             colour,
             colour,
-            colour);
+            colour,
+            false);
   }
 
   // The current scene. Objects added go in here.
   public void addScene(){
     // Floor!
-    addTriangle(new Point3D(1000, -100, 1000), 
-                new Point3D(1000, -100, -1000), 
-                new Point3D(-1000,-100,1000),
+    addTriangle(new Point3D(500, -50, 500), 
+                new Point3D(500, -50, -500), 
+                new Point3D(-500,-50,500),
                 new Point3D(100,30,156));
-    addTriangle(new Point3D(-1000, -100, 1000), 
-                new Point3D(-1000, -100, -1000), 
-                new Point3D(1000,-100,-1000),
+    addTriangle(new Point3D(-500, -50, 500), 
+                new Point3D(-500, -50, -500), 
+                new Point3D(500,-50,-500),
                 new Point3D(100,30,156));
 
     // Cubes!
-    addCube(new Point3D(200,-100,200), 
-            new Point3D(400,100,400), 
+    addCube(new Point3D(100,-50,100), 
+            new Point3D(200,20,200),
             new Point3D(130,248,120),
             new Point3D(130,248,120),
             new Point3D(130,248,120),
             new Point3D(130,248,120),
             new Point3D(130,248,120),
-            new Point3D(130,248,120));
+            new Point3D(130,248,120),
+            true);
 
+    addCube(new Point3D(200,100,100), 
+            new Point3D(300,170,200),
+            new Point3D(130,248,120),
+            new Point3D(130,248,120),
+            new Point3D(130,248,120),
+            new Point3D(130,248,120),
+            new Point3D(130,248,120),
+            new Point3D(130,248,120),
+            true);
     // Lights!
-    addLight(new Point3D(300,200,100), new Point3D(255,255,255), new Point3D(200,5,0));
+    addLight(new Point3D(100,0,20), new Point3D(255,255,255), new Point3D(50,5,0));
   }
 }
