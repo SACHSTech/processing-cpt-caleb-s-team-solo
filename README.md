@@ -2,6 +2,6 @@
 [![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-718a45dd9cf7e7f842a935f5ebbe5719a5e09af4491e668f4dbf3b35d5cca122.svg)](https://classroom.github.com/online_ide?assignment_repo_id=15153008&assignment_repo_type=AssignmentRepo)
 # Program Title (edit this)
 
-When running the code, do not move your mouse until you see the screen apear. The mouse is calibrating during this time, and the camera will spin uncontrollably if your mouse moves.
+When running the code, do not move your mouse until you see the screen apear. The mouse is calibrating during this time, and the camera will spin uncontrollably if your mouse moves. If this happens, hold your mouse completely still and press c to recalibrate.
 
 If keyboard controls don't work, try clicking once with your mouse. When the program launches, your computer's focus is not on that window, so keyboard inputs wont be read until you click.
