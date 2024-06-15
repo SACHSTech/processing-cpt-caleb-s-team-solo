@@ -16,11 +16,7 @@ import java.util.List;
 */
 public class Rendering extends PApplet {
   // Initalizing the variables
-  double dblFocalLength = 300;
-  int intScreenSize = 600;
-  // 600 instead of 800 because theres 56% less max space to loop through, which means that its far less laggy with only a 200 pixel reduction
-  int scDiv2 = intScreenSize/2; // used this so much that i might as well make it a variable
-
+  double dblFocalLength = 500;  
   // Scene stuff
   double cameraX = 0;
   double cameraY = 0;
@@ -30,12 +26,15 @@ public class Rendering extends PApplet {
   double mouseCenteredX = 0;
   double mouseCenteredY = 0;
   double mouseSensitivity = 180;
-  double[] zBuffer = new double[intScreenSize*intScreenSize];
   List<Triangle3D> TriangleList3D = new ArrayList<>();
+  int intScreenSize;
   double platformH1 = 0;
   // Emphasis on the box part, the hitboxes are non-rotatable rectangular prisms.
   List<Point3D[]> HitBoxList = new ArrayList<>();
   List<Triangle2D> TriangleList2D = new ArrayList<>();
+  double[] zBuffer;
+  int scDiv2;
+
 
   // Lighting stuff
   double ambientLightStrength = 0.1;
@@ -62,9 +61,12 @@ public class Rendering extends PApplet {
   boolean hasJump = true;
   Robot mouseStealer9000;
   double devStats = -1;
+  double menu = -1;
+  boolean mouseClicked = false;
 
   public void settings() {
-    size(intScreenSize, intScreenSize);
+    size(displayWidth, displayHeight);
+    fullScreen();
   }
 
   public void setup() {
@@ -78,6 +80,9 @@ public class Rendering extends PApplet {
     noCursor();
     mouseStealer9000.mouseMove(displayWidth/2, displayHeight/2);
     frameRate(60);
+    intScreenSize = Math.min(displayHeight,displayWidth);
+    zBuffer = new double[intScreenSize*intScreenSize];
+    scDiv2 = intScreenSize/2;
   }
 
   // Initialization ends here
@@ -90,23 +95,44 @@ public class Rendering extends PApplet {
 
     // Drawing part
     clear();
-    renderInOrder();
-    cursorMovement();
-    moveChar();
+    if(menu == -1){
+      cursorMovement();
+      renderInOrder();
+      moveChar();
+      noCursor();
 
-    // fps counter n other stuff
-    if(devStats == 1){
-      fill(255, 255, 255);
-      textSize(18);
-      text("fps: " + Math.round(frameRate*100.0)/100.0, 20, 20);
-      text("Mouse x Rotation: " + Math.round((mouseRotationX)*100.0)/100.0, 20, 50);
-      text("Mouse y Rotation: " + Math.round((mouseRotationY)*100.0)/100.0, 20, 80);
-      text("Player x: " + Math.round((playerXPos)*100.0)/100.0, intScreenSize-170, 20);
-      text("Player y: " + Math.round((playerYPos)*100.0)/100.0, intScreenSize-170, 50);
-      text("Player x vel: " + Math.round((playerXVel)*100.0)/100.0, intScreenSize-170, 80);
-      text("Player y vel: " + Math.round((playerYVel)*100.0)/100.0, intScreenSize-170, 110);
+      // fps counter n other stuff. mostly for testing.
+      if(devStats == 1){
+        displayStats();
+      }
     }
-
+    else{
+      clear();
+      fill(255,255,255);
+      rect(displayWidth/2-150,displayHeight/2+300,300,100);
+      rect(displayWidth/2-150,displayHeight/2+100,300,100);
+      rect(displayWidth/2-150,displayHeight/2-100,300,100);
+      text("You are paused!", displayWidth/2-300,displayHeight/2-300);
+      textSize(30);
+      text("Press ESC again to unpause", displayWidth/2-200,displayHeight/2-250);
+      fill(0,0,0);
+      text("Reset mouse(c)", displayWidth/2-105,displayHeight/2+160);
+      text("Toggle devstats(f)", displayWidth/2-120,displayHeight/2-45);
+      fill(255,0,0);
+      textSize(80);
+      text("EXIT", displayWidth/2-85,displayHeight/2+380);
+      if(mouseX > displayWidth/2-150 && mouseX < displayWidth/2+250 && mouseY > displayHeight/2+300 && mouseY < displayHeight/2+400 && mousePressed){
+        exit();
+      }
+      if(mouseX > displayWidth/2-150 && mouseX < displayWidth/2+250 && mouseY > displayHeight/2+100 && mouseY < displayHeight/2+200 && mousePressed){
+        mouseStealer9000.mouseMove(displayWidth/2, displayHeight/2);
+        mouseCenteredX = 0;
+        mouseCenteredY = 0;
+      }
+      if(mouseX > displayWidth/2-150 && mouseX < displayWidth/2+250 && mouseY > displayHeight/2-100 && mouseY < displayHeight/2){
+        //Just press f. I cant deal with this stupidly inconsistant code anymore
+      }
+    }
   }
 
   // 3D framework starts here
@@ -117,12 +143,12 @@ public class Rendering extends PApplet {
   public void drawLines(){
     float a = scDiv2;
     for(int x = 0; x < TriangleList2D.size(); x++){
-      float x1 = a+(float)TriangleList2D.get(x).p1.x;
-      float x2 = a+(float)TriangleList2D.get(x).p2.x;
-      float x3 = a+(float)TriangleList2D.get(x).p3.x;
-      float y1 = a+(float)TriangleList2D.get(x).p1.y;
-      float y2 = a+(float)TriangleList2D.get(x).p2.y;
-      float y3 = a+(float)TriangleList2D.get(x).p3.y;
+      float x1 = displayWidth-a+(float)TriangleList2D.get(x).p1.x;
+      float x2 = displayWidth-a+(float)TriangleList2D.get(x).p2.x;
+      float x3 = displayWidth-a+(float)TriangleList2D.get(x).p3.x;
+      float y1 = displayHeight-a+(float)TriangleList2D.get(x).p1.y;
+      float y2 = displayHeight-a+(float)TriangleList2D.get(x).p2.y;
+      float y3 = displayHeight-a+(float)TriangleList2D.get(x).p3.y;
       line(x1,y1,x2,y2);
       line(x2,y2,x3,y3);
       line(x3,y3,x1,y1);
@@ -480,17 +506,11 @@ public class Rendering extends PApplet {
               pColor.y = Math.abs(pColor.y*255.0*(diffuseLight.y+ambientLight.y));
               pColor.z = Math.abs(pColor.z*255.0*(diffuseLight.z+ambientLight.z));
               int c = color((int)pColor.x,(int)pColor.y,(int)pColor.z);
-              set(scDiv2+x,(scDiv2+y)+1,c);
+              set(scDiv2+x+(displayWidth-intScreenSize)/2,(scDiv2+y)+1+(displayHeight-intScreenSize)/2,c);
             }
           }
         }
       }
-    }
-    // Border for the screen
-    for(int x = 0; x < intScreenSize; x++){
-      set(0,x,color(0,0,0));
-      set(x,intScreenSize-1,color(0,0,0));
-      set(intScreenSize-2,x,color(0,0,0));
     }
   }
 
@@ -546,11 +566,18 @@ public class Rendering extends PApplet {
   }
   
   public void keyPressed() {
+    if(keyCode == ESC){
+      key = 0;
+      cursor();
+      menu *= -1;
+    }
     if(key != 65535){
       isKeyPressed[(int)Character.toLowerCase(key)] = true;
     }
-    else if(key == CODED && keyCode == SHIFT){
-      isKeyPressed[255] = true;
+    else if(key == CODED){
+      if(keyCode == SHIFT){
+        isKeyPressed[255] = true;
+      }
     }
   }
   
@@ -736,8 +763,8 @@ public class Rendering extends PApplet {
     double maxZ = maxPoint.z;
 
     for(int x = 0; x < 4; x += 1){
-      PointList[x*2].x = maxX;
-      PointList[x*2+1].x = minX;
+      PointList[x*2].x = maxX+1;
+      PointList[x*2+1].x = minX-1;
       PointList[(x/2)*2+x].y = maxY;
       PointList[(x/2)*2+x+2].y = minY;
       PointList[x].z = minZ;
@@ -795,6 +822,24 @@ public class Rendering extends PApplet {
    */
   public void addHitBox(Point3D max, Point3D min){
     HitBoxList.add(new Point3D[]{max,min});
+  }
+
+  /**
+   * Displays stats.
+   */
+  public void displayStats(){
+    fill(255, 255, 255);
+    textSize(18);
+    text("fps: " + Math.round(frameRate*100.0)/100.0, 20, 20);
+    text("Mouse x Rotation: " + Math.round((mouseRotationX)*100.0)/100.0, 20, 50);
+    text("Mouse y Rotation: " + Math.round((mouseRotationY)*100.0)/100.0, 20, 80);
+    text("Player x: " + Math.round((playerXPos)*100.0)/100.0, displayWidth-170, 20);
+    text("Player y: " + Math.round((playerYPos)*100.0)/100.0, displayWidth-170, 50);
+    text("Player z: " + Math.round((playerZPos)*100.0)/100.0, displayWidth-170, 80);
+    text("Player x vel: " + Math.round((playerXVel)*100.0)/100.0, displayWidth-170, 110);
+    text("Player y vel: " + Math.round((playerYVel)*100.0)/100.0, displayWidth-170, 140);
+    text("Player z vel: " + Math.round((playerZVel)*100.0)/100.0, displayWidth-170, 170);
+
   }
 
   /**
